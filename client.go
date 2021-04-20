@@ -1,6 +1,9 @@
 package signalr
 
 import (
+	"bytes"
+	"compress/zlib"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -32,6 +35,7 @@ type Client struct {
 	params              negotiationResponse
 	socket              *websocket.Conn
 	nextId              int
+	messagesAsGzip      bool
 
 	// Futures for server call responses and a guarding mutex.
 	responseFutures map[string]chan *serverMessage
@@ -45,6 +49,13 @@ type serverMessage struct {
 	Result     json.RawMessage   `json:"R"`
 	Identifier string            `json:"I"`
 	Error      string            `json:"E"`
+}
+
+func ungzipMessage(message string) json.RawMessage {
+	z, _ := base64.StdEncoding.DecodeString(message)
+	r, _ := zlib.NewReader(bytes.NewReader(z))
+	result, _ := ioutil.ReadAll(r)
+	return result
 }
 
 func negotiate(scheme, address string) (negotiationResponse, error) {
@@ -272,5 +283,14 @@ func NewWebsocketClient() *Client {
 	return &Client{
 		nextId:          1,
 		responseFutures: make(map[string]chan *serverMessage),
+		messagesAsGzip:  false,
+	}
+}
+
+func NewWebsocketClientWithGzipMessages() *Client {
+	return &Client{
+		nextId:          1,
+		responseFutures: make(map[string]chan *serverMessage),
+		messagesAsGzip:  true,
 	}
 }
