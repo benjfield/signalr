@@ -1,9 +1,6 @@
 package signalr
 
 import (
-	"bytes"
-	"compress/zlib"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -29,7 +26,7 @@ type negotiationResponse struct {
 
 type Client struct {
 	OnMessageError func(err error)
-	OnClientMethod func(hub, method string, arguments []json.RawMessage)
+	OnClientMethod func(hub, method string, arguments []string)
 	// When client disconnects, the causing error is sent to this channel. Valid only after Connect().
 	DisconnectedChannel chan bool
 	params              negotiationResponse
@@ -49,13 +46,6 @@ type serverMessage struct {
 	Result     json.RawMessage   `json:"R"`
 	Identifier string            `json:"I"`
 	Error      string            `json:"E"`
-}
-
-func ungzipMessage(message string) json.RawMessage {
-	z, _ := base64.StdEncoding.DecodeString(message)
-	r, _ := zlib.NewReader(bytes.NewReader(z))
-	result, _ := ioutil.ReadAll(r)
-	return result
 }
 
 func negotiate(scheme, address string) (negotiationResponse, error) {
@@ -98,7 +88,7 @@ func connectWebsocket(address string, params negotiationResponse, hubs []string)
 	connectionParameters.Set("clientProtocol", "1.5")
 	connectionParameters.Set("connectionToken", params.ConnectionToken)
 	connectionParameters.Set("connectionData", string(connectionDataBytes))
-
+	fmt.Println(address)
 	var connectionUrl = url.URL{Scheme: "wss", Host: address, Path: "signalr/connect"}
 	connectionUrl.RawQuery = connectionParameters.Encode()
 
@@ -182,12 +172,13 @@ func (self *Client) dispatch(connectedChannel chan bool) {
 		var message serverMessage
 
 		var hubCall struct {
-			HubName   string            `json:"H"`
-			Method    string            `json:"M"`
-			Arguments []json.RawMessage `json:"A"`
+			HubName   string   `json:"H"`
+			Method    string   `json:"M"`
+			Arguments []string `json:"A"`
 		}
 
 		_, data, err := self.socket.ReadMessage()
+		//fmt.Println("Recieved: ", string(data))
 		if err != nil {
 			self.socket.Close()
 			break
@@ -238,6 +229,7 @@ func (self *Client) CallHub(hub, method string, params ...interface{}) (json.Raw
 		return nil, err
 	}
 
+	//fmt.Println("Sent: ", string(data))
 	if err := self.socket.WriteMessage(websocket.TextMessage, data); err != nil {
 		return nil, err
 	}
@@ -260,7 +252,7 @@ func (self *Client) Connect(scheme, host string, hubs []string) error {
 	} else {
 		self.params = params
 	}
-
+	fmt.Println(self.params)
 	// Connect Websocket.
 	if ws, err := connectWebsocket(host, self.params, hubs); err != nil {
 		return err
